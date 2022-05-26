@@ -1,17 +1,18 @@
 package ro.systematic.workshops.di.injectables.impl;
 
 import ro.systematic.workshops.di.injectables.Database;
+import ro.systematic.workshops.di.injectables.EmailService;
 import ro.systematic.workshops.di.injectables.FuellingService;
 import ro.systematic.workshops.di.model.MilitaryVehicle;
 
 public class FuellingServiceImpl implements FuellingService {
 
     private Database database;
-    private EmailServiceImpl emailService;
+    private EmailService emailService;
 
-    public FuellingServiceImpl(Database database) {
+    public FuellingServiceImpl(Database database, EmailService emailService) {
         this.database = database;
-        this.emailService = new EmailServiceImpl();
+        this.emailService = emailService;
     }
 
     @Override

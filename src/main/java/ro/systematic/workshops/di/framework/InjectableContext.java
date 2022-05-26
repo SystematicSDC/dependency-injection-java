@@ -7,4 +7,5 @@ public class InjectableContext<T> {
     Class<? extends Injectable> injectableClass;
     List<Class<? extends Injectable>> dependencies;
     InstanceFactory<T> factory;
+    String qualifier;
 }

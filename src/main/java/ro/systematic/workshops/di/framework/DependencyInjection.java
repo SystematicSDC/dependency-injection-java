@@ -8,6 +8,7 @@ import ro.systematic.workshops.di.exceptions.NoInjectableFoundException;
 import ro.systematic.workshops.di.exceptions.UnsatisfiedDependencyException;
 
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @SuppressWarnings("unchecked")
@@ -26,8 +27,16 @@ public class DependencyInjection {
         return obj;
     }
 
-    Map<Class<? extends Injectable>, InjectableContext<? extends Injectable>> diMap = new HashMap<>();
-
+    Map<Class<? extends Injectable>, List<InjectableContext<? extends Injectable>>> diMap = new HashMap<>();
+    /**
+     * Register the injectable in the injector registry
+     *
+     * @param injectableClass class based on which the injector will provide an instance
+     * @param factory         callback that is responsible with creating new instances
+     */
+    public final <T extends Injectable> void register(Class<T> injectableClass, InstanceFactory<T> factory, Class<? extends Injectable> ... dependencies) {
+        register(injectableClass, factory, null, dependencies);
+    }
     /**
      * Register the injectable in the injector registry
      *
@@ -35,21 +44,41 @@ public class DependencyInjection {
      * @param factory         callback that is responsible with creating new instances
      */
     @SafeVarargs
-    public final <T extends Injectable> void register(Class<T> injectableClass, InstanceFactory<T> factory, Class<? extends Injectable> ... dependencies) {
+    public final <T extends Injectable> void register(Class<T> injectableClass, InstanceFactory<T> factory, String qualifier, Class<? extends Injectable> ... dependencies) {
         InjectableContext<T> injectable = new InjectableContext<>();
         injectable.factory = factory;
         injectable.injectableClass = injectableClass;
         injectable.dependencies = Arrays.asList(dependencies);
-        diMap.put(injectableClass, injectable);
-    }
+        injectable.qualifier = qualifier;
 
+        //add injectable context in the Di Multi Map.
+        diMap.computeIfAbsent(injectableClass, aClass -> new LinkedList<>()).add(injectable);
+
+//        //same with:
+//        diMap.computeIfAbsent(injectableClass, new Function<Class<? extends Injectable>, List<InjectableContext<? extends Injectable>>>() {
+//            @Override
+//            public List<InjectableContext<? extends Injectable>> apply(Class<? extends Injectable> aClass) {
+//                return new LinkedList<>();
+//            }
+//        }).add(injectable);
+    }
+    public <T extends Injectable> T get(Class<T> injectableClazz) throws DependencyInjectionException{
+        return get(injectableClazz,null);
+    }
     /**
      * Resolves and provides instance of provided class based on the registered injectables
      *
      * @param injectableClazz class used to search for instance in the registry
      */
-    public <T extends Injectable> T get(Class<T> injectableClazz) throws DependencyInjectionException {
-        InjectableContext<T> injectable = (InjectableContext<T>) diMap.get(injectableClazz);
+    public <T extends Injectable> T get(Class<T> injectableClazz, String qualifier) throws DependencyInjectionException {
+        List<InjectableContext<? extends Injectable>> injectables = diMap.get(injectableClazz);
+        if (qualifier != null) {
+            injectables = injectables.stream().filter(i -> qualifier.equals(i.qualifier)).collect(Collectors.toList());
+        }
+        if(injectables.isEmpty()){
+            throw new NoInjectableFoundException("No injectable found with name: "+ injectableClazz.getSimpleName());
+        }
+        InjectableContext<T> injectable = (InjectableContext<T>) injectables.get(0);
 
         if (injectable != null) {
             logger.debug("Getting: {}", injectableClazz.getSimpleName());
@@ -86,17 +115,21 @@ public class DependencyInjection {
         injectable.instance = injectable.factory.newInstance();
     }
 
-    private <T extends Injectable> void checkCyclicDependency(InjectableContext<T> injectable, List<Class<? extends Injectable>> callStack ) throws CyclicDependencyException {
+    private <T extends Injectable> void checkCyclicDependency(InjectableContext<T> injectable, List<Class<? extends Injectable>> callStack) throws CyclicDependencyException {
         if(callStack.contains(injectable.injectableClass)){
             callStack.add(injectable.injectableClass);
             throw new CyclicDependencyException(callStack);
         }else{
             callStack.add(injectable.injectableClass);
             for(Class<? extends Injectable> dependency : injectable.dependencies){
-                InjectableContext<? extends Injectable> dependencyContext = diMap.get(dependency);
-                if(dependencyContext!=null){
-                    checkCyclicDependency(dependencyContext, callStack);
+                List<InjectableContext<? extends Injectable>> injectables = diMap.get(dependency);
+                if (injectables != null) {
+                    InjectableContext<? extends Injectable> dependencyContext = injectables.get(0);
+                    if (dependencyContext != null) {
+                        checkCyclicDependency(dependencyContext, callStack);
+                    }
                 }
+
             }
         }
     }

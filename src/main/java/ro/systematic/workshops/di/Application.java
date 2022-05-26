@@ -6,11 +6,10 @@ import ro.systematic.workshops.di.exceptions.DependencyInjectionException;
 import ro.systematic.workshops.di.framework.DependencyInjection;
 import ro.systematic.workshops.di.framework.InstanceFactory;
 import ro.systematic.workshops.di.injectables.Database;
+import ro.systematic.workshops.di.injectables.EmailService;
 import ro.systematic.workshops.di.injectables.FuellingService;
 import ro.systematic.workshops.di.injectables.VehicleDataSource;
-import ro.systematic.workshops.di.injectables.impl.DatabaseImpl;
-import ro.systematic.workshops.di.injectables.impl.FuellingServiceImpl;
-import ro.systematic.workshops.di.injectables.impl.TanksDataSource;
+import ro.systematic.workshops.di.injectables.impl.*;
 
 @SuppressWarnings("java:S1604")//suppress warnings for using lambdas
 public class Application {
@@ -41,21 +40,28 @@ public class Application {
         injector.register(VehicleDataSource.class, new InstanceFactory<VehicleDataSource>() {
             @Override
             public VehicleDataSource newInstance() {
-                return new TanksDataSource();
+                return new VesselDataSource();//FOR TASK 4
             }
         });
-
+        injector.register(VehicleDataSource.class, TanksDataSource::new, "tanks");
         //register new injectable with dependency via a setter
         injector.register(Database.class, () -> {
             DatabaseImpl database = new DatabaseImpl();
-            database.setDataSource(injector.get(VehicleDataSource.class));
+            database.setDataSource(injector.get(VehicleDataSource.class, "tanks"));
             return database;
         }, VehicleDataSource.class);
 
         //register new injectable with dependency via a constructor
         injector.register(FuellingService.class,
-                () -> new FuellingServiceImpl(injector.get(Database.class)),
-                Database.class);
+                () -> new FuellingServiceImpl(injector.get(Database.class), injector.get(EmailService.class)),
+                Database.class, EmailService.class);
+
+        injector.register(EmailService.class, new InstanceFactory<EmailService>() {
+            @Override
+            public EmailService newInstance() throws DependencyInjectionException {
+                return new EmailServiceImpl();
+            }
+        });
     }
 
     public void start() {
